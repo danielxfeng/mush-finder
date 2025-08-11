@@ -3,7 +3,7 @@ from typing import cast
 import pytest
 from pydantic import AnyHttpUrl, ValidationError
 
-from mushfinder.schemas import TaskBody, TaskResponse, TaskResult, TaskStatus
+from mush_finder.schemas import TaskBody, TaskResponse, TaskResult, TaskStatus
 
 img = cast(AnyHttpUrl, "https://example.com/test.jpg")
 
