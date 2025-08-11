@@ -1,5 +1,0 @@
-fastapi[standard]
-uvicorn
-redis
-pydantic
-pytest
