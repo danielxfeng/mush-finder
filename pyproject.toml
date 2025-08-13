@@ -3,7 +3,7 @@ name = "mush-finder"
 version = "0.1.0"
 description = ""
 authors = [
-    { name = "Xin Feng", email = "126309503+danielxfeng@users.noreply.github.com" },
+    { name = "Daniel", email = "126309503+danielxfeng@users.noreply.github.com" },
 ]
 license = { text = "MIT" }
 readme = "README.md"
@@ -13,6 +13,8 @@ dependencies = [
     "uvicorn (>=0.35.0,<0.36.0)",
     "redis (>=6.4.0,<7.0.0)",
     "pydantic (>=2.11.7,<3.0.0)",
+    "aioredis (>=2.0.1,<3.0.0)",
+    "pydantic-settings (>=2.10.1,<3.0.0)",
 ]
 
 [build-system]

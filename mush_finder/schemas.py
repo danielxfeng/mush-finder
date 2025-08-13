@@ -1,12 +1,8 @@
-import os
 from enum import Enum
 
 from pydantic import AnyHttpUrl, BaseModel, Field, field_validator
 
-IMG_URL_PREFIX = os.getenv(
-    "IMG_URL_PREFIX",
-    "https://",
-)
+from mush_finder.settings import settings
 
 
 class PHash(BaseModel):
@@ -31,7 +27,7 @@ class TaskBody(PHash):
 
     @field_validator("img_url")
     def must_start_with_prefix(cls, v: AnyHttpUrl) -> AnyHttpUrl:
-        if not str(v).startswith(IMG_URL_PREFIX):
+        if not str(v).startswith(settings.img_url_prefix):
             raise ValueError("img should be uploaded from front-end app")
         return v
 
@@ -62,3 +58,8 @@ class TaskResponse(PHash):
         title="Result",
         description="List of task results",
     )
+
+
+class HashedTask(TaskResponse):
+    processed_at: str = Field(ge=0)
+    retry_count: int = Field(default=0, ge=0)
