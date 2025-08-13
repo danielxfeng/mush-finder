@@ -17,8 +17,13 @@ class Settings(BaseSettings):
     redis_url: RedisDsn = Field(..., alias="REDIS_URL")
     tasks_key: str = Field(..., alias="TASKS_KEY")
     queue_key: str = Field(..., alias="QUEUE_KEY")
+    worker_queue_key: str = Field(..., alias="WORKER_QUEUE_KEY")
     result_ttl: int = Field(..., alias="RESULT_TTL")
     claim_ms: int = Field(..., alias="CLAIM_MS")
+
+    workers: int = Field(..., alias="WORKERS")
+    max_retry_count: int = Field(..., alias="MAX_RETRY_COUNT")
+    task_timeout: int = Field(..., alias="TASK_TIMEOUT")
 
     img_url_prefix: str = Field(..., alias="IMG_URL_PREFIX")
 
