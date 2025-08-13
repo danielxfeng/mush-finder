@@ -37,6 +37,7 @@ class TaskStatus(str, Enum):
     processing = "processing"
     done = "done"
     error = "error"
+    not_found = "not_found"
 
 
 class TaskResult(BaseModel):
@@ -58,6 +59,6 @@ class TaskResponse(PHash):
     )
 
 
-class HashedTask(TaskResponse):
-    processed_at: str = Field(ge=0)
+class HashTask(TaskResponse):
+    processed_at: int = Field(ge=0)
     retry_count: int = Field(default=0, ge=0)
