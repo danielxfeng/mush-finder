@@ -46,9 +46,7 @@ class TaskResult(BaseModel):
         description="Category of the mushroom",
         examples=["mushroom"],
     )
-    confidence: float = Field(
-        ..., title="Confidence", description="0~1", ge=0.0, le=1.0, examples=[0.95]
-    )
+    confidence: float = Field(..., title="Confidence", description="0~1", ge=0.0, le=1.0, examples=[0.95])
 
 
 class TaskResponse(PHash):
