@@ -12,9 +12,7 @@ def is_prod() -> bool:
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env" if is_prod() else ".env.sample")
 
-    cors_origins: Union[list[AnyHttpUrl], Literal["*"]] = Field(
-        ..., alias="CORS_ORIGINS"
-    )
+    cors_origins: Union[list[AnyHttpUrl], Literal["*"]] = Field(..., alias="CORS_ORIGINS")
 
     redis_url: RedisDsn = Field(..., alias="REDIS_URL")
     tasks_key: str = Field(..., alias="TASKS_KEY")
@@ -26,7 +24,7 @@ class Settings(BaseSettings):
 
     @field_validator("cors_origins", mode="before")
     @classmethod
-    def normalize_cors(cls, v: Any):
+    def normalize_cors(cls, v: Any) -> Union[list[AnyHttpUrl], Literal["*"]]:
         if isinstance(v, str):
             v = v.strip()
             if v == "*":
