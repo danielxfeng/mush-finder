@@ -29,7 +29,7 @@ async def init_redis() -> None:
 async def close_redis() -> None:
     global redis_client
     if redis_client:
-        await redis_client.close()
+        await redis_client.aclose()  # type: ignore[attr-defined]
         redis_client = None
 
 
@@ -57,10 +57,11 @@ async def _add_or_retry_task(task: HashTask, mode: Literal["add", "retry"]) -> H
     task_key = f"{settings.tasks_key}:{task.p_hash}"
 
     while True:
+        pipe = r.pipeline()
         try:
-            await r.watch(task_key)
+            await pipe.watch(task_key)
 
-            data = await r.get(task_key)
+            data = await pipe.get(task_key)
 
             if mode == "add" and data and (validated := _validate_task(data)):
                 return validated
@@ -78,7 +79,7 @@ async def _add_or_retry_task(task: HashTask, mode: Literal["add", "retry"]) -> H
                 task.status = TaskStatus.queued
                 task.retry_count += 1
 
-            pipe = r.pipeline()
+            pipe.multi()
             pipe.set(task_key, task.model_dump_json(), ex=settings.result_ttl)
             pipe.rpush(settings.queue_key, task.p_hash)  # right in / left out, FIFO
 
@@ -88,7 +89,11 @@ async def _add_or_retry_task(task: HashTask, mode: Literal["add", "retry"]) -> H
         except WatchError:
             continue
         finally:
-            await r.unwatch()
+            try:
+                await pipe.unwatch()
+            except Exception:
+                pass
+            await pipe.reset()
 
 
 async def get_or_retry_task(p_hash: str) -> HashTask:
@@ -188,13 +193,13 @@ async def consume_task(task_handler: TaskHandler) -> None:
             result = await asyncio.wait_for(task_handler(task), timeout=settings.task_timeout)
             if result.status == TaskStatus.error:
                 raise ValueError("Task handler returned an error status")
-
+            await r.set(task_key, result.model_dump_json(), ex=settings.result_ttl)
         except Exception:
             result = task
             result.status = TaskStatus.error
-            await _add_or_retry_task(result, mode="retry")
-        finally:
             await r.set(task_key, result.model_dump_json(), ex=settings.result_ttl)
+            if result.retry_count < settings.max_retry_count:
+                await _add_or_retry_task(result, mode="retry")
 
 
 __all__ = [
