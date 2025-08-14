@@ -1,7 +1,9 @@
 import asyncio
+import json
 import time
 from typing import Awaitable, Callable, Literal, cast
 
+from pydantic import ValidationError
 from redis.asyncio.client import Redis
 from redis.exceptions import WatchError
 
@@ -39,36 +41,44 @@ def get_redis() -> Redis:
 
 async def health_check() -> dict:
     r = get_redis()
-    await r.set("status", "ok")
-    return {"message": await r.get("ok")}
+    await r.ping()
+    return {"message": "ok"}
 
 
-async def _add_or_retry_task(task: HashTask, mode: Literal["add", "retry"]) -> HashTask | None:
+def _validate_task(task_str: str) -> HashTask | None:
+    try:
+        return HashTask.model_validate_json(task_str)
+    except (ValidationError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+
+
+async def _add_or_retry_task(task: HashTask, mode: Literal["add", "retry"]) -> HashTask:
     r = get_redis()
-    key = settings.tasks_key
+    task_key = f"{settings.tasks_key}:{task.p_hash}"
 
     while True:
         try:
-            await r.watch(key)
+            await r.watch(task_key)
 
-            data = await r.hget(key, task.p_hash)
+            data = await r.get(task_key)
 
-            if mode == "add" and data:
-                return HashTask.model_validate_json(data)
+            if mode == "add" and data and (validated := _validate_task(data)):
+                return validated
             elif mode == "retry" and not data:
-                return None
+                return HashTask(
+                    p_hash=task.p_hash, status=TaskStatus.not_found, result=[], retry_count=0, processed_at=0
+                )
 
             if mode == "retry":
                 task.status = TaskStatus.queued
                 task.retry_count += 1
 
             pipe = r.pipeline()
-            pipe.hset(key, task.p_hash, task.model_dump_json())
-            pipe.expire(key, settings.result_ttl)
-            pipe.lpush(settings.queue_key, task.p_hash)
+            pipe.set(task_key, task.model_dump_json(), ex=settings.result_ttl)
+            pipe.rpush(settings.queue_key, task.p_hash)  # right in / left out, FIFO
 
             await pipe.execute()
-            return None if mode == "add" else task
+            return task
 
         except WatchError:
             continue
@@ -76,15 +86,23 @@ async def _add_or_retry_task(task: HashTask, mode: Literal["add", "retry"]) -> H
             await r.unwatch()
 
 
-async def get_or_retry_task(p_hash: str) -> HashTask | None:
-    r = get_redis()
-    key = settings.tasks_key
+async def get_or_retry_task(p_hash: str) -> HashTask:
+    """Get a task by its p_hash, with retry-on-failure logic.
 
-    data = await r.hget(key, p_hash)
-    if not data:
+    Args:
+        p_hash (str): The p_hash of the task to retrieve.
+
+    Returns:
+        HashTask: The retrieved task.
+    """
+
+    r = get_redis()
+
+    data = await r.get(f"{settings.tasks_key}:{p_hash}")
+    if not data or not (validated := _validate_task(data)):
         return HashTask(p_hash=p_hash, status=TaskStatus.not_found, result=[], retry_count=0, processed_at=0)
 
-    task = HashTask.model_validate_json(data)
+    task = validated
 
     now = int(time.time())
     is_task_timeout = task.status == TaskStatus.processing and now - task.processed_at >= settings.task_timeout
@@ -92,7 +110,11 @@ async def get_or_retry_task(p_hash: str) -> HashTask | None:
         task.status == TaskStatus.error or is_task_timeout
     ) and task.retry_count >= settings.max_retry_count
 
-    if task.status in (TaskStatus.done, TaskStatus.queued) or is_task_final_err:
+    if (
+        (task.status in (TaskStatus.done, TaskStatus.queued))
+        or (task.status == TaskStatus.processing and not is_task_timeout)
+        or is_task_final_err
+    ):
         return task
 
     if task.status == TaskStatus.error or is_task_timeout:
@@ -101,63 +123,72 @@ async def get_or_retry_task(p_hash: str) -> HashTask | None:
     raise ValueError(f"Unexpected task status: {task.status}")
 
 
-async def get_or_add_task(task: HashTask) -> HashTask | None:
+async def new_task(task: HashTask) -> HashTask:
+    """Create a new task, or return the result if it already exists.
+    Idempotent for the same p_hash.
+
+    Args:
+        task (HashTask): The task to create.
+
+    Returns:
+        HashTask: The created or existing task.
+    """
+
     return await _add_or_retry_task(task, mode="add")
-
-
-async def dispatch_tasks_with_limit() -> None:
-    r = get_redis()
-    while True:
-        if await r.llen(settings.worker_queue_key) >= settings.workers:
-            await asyncio.sleep(SLEEP_INTERVAL)
-            continue
-
-        p_hash = await r.lpop(settings.queue_key)
-        if not p_hash:
-            await asyncio.sleep(SLEEP_INTERVAL)
-            continue
-
-        await r.lpush(settings.worker_queue_key, p_hash)
 
 
 TaskHandler = Callable[[HashTask], Awaitable[HashTask]]
 
 
-async def perform_tasks_with_timeout(task_handler: TaskHandler) -> None:
+async def consume_task(task_handler: TaskHandler) -> None:
+    """Consume tasks from the `queue` in a blocking loop, with a timeout and retry logic.
+
+    Args:
+        task_handler (TaskHandler): A function that processes a single task.
+    """
+
     r = get_redis()
     while True:
-        p_hash = await r.lpop(settings.worker_queue_key)
-        if not p_hash:
+        popped = await r.blpop(settings.queue_key, timeout=SLEEP_INTERVAL)  # right in / left out, FIFO
+        if not popped:
             await asyncio.sleep(SLEEP_INTERVAL)
             continue
 
-        data = await r.hget(settings.tasks_key, p_hash)
+        _, p_hash = popped
+
+        task_key = f"{settings.tasks_key}:{p_hash}"
+
+        data = await r.get(task_key)
         if not data:
             continue
 
-        task = HashTask.model_validate_json(data)
-        if task.status != TaskStatus.queued:
+        task = _validate_task(data)
+
+        if not task or task.status != TaskStatus.queued:
             continue
 
         task.status = TaskStatus.processing
         task.processed_at = int(time.time())
 
-        await r.hset(settings.tasks_key, p_hash, task.model_dump_json())
+        await r.set(task_key, task.model_dump_json(), ex=settings.result_ttl)
 
         try:
             result = await asyncio.wait_for(task_handler(task), timeout=settings.task_timeout)
-            await r.hset(settings.tasks_key, p_hash, result.model_dump_json())
+            if result.status == TaskStatus.error:
+                raise ValueError("Task handler returned an error status")
+
         except Exception:
-            task.status = TaskStatus.error
-            await r.hset(settings.tasks_key, p_hash, task.model_dump_json())
-            await _add_or_retry_task(task, mode="retry")
+            result = task
+            result.status = TaskStatus.error
+            await _add_or_retry_task(result, mode="retry")
+        finally:
+            await r.set(task_key, result.model_dump_json(), ex=settings.result_ttl)
 
 
 __all__ = [
     "get_redis",
     "health_check",
     "get_or_retry_task",
-    "get_or_add_task",
-    "dispatch_tasks_with_limit",
-    "perform_tasks_with_timeout",
+    "new_task",
+    "consume_task",
 ]

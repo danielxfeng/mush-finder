@@ -17,7 +17,6 @@ class Settings(BaseSettings):
     redis_url: RedisDsn = Field(..., alias="REDIS_URL")
     tasks_key: str = Field(..., alias="TASKS_KEY")
     queue_key: str = Field(..., alias="QUEUE_KEY")
-    worker_queue_key: str = Field(..., alias="WORKER_QUEUE_KEY")
     result_ttl: int = Field(..., alias="RESULT_TTL")
     claim_ms: int = Field(..., alias="CLAIM_MS")
 
