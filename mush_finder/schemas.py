@@ -59,6 +59,6 @@ class TaskResponse(PHash):
     )
 
 
-class HashTask(TaskResponse):
+class HashTask(TaskResponse, TaskBody):
     processed_at: int = Field(ge=0)
     retry_count: int = Field(default=0, ge=0)
