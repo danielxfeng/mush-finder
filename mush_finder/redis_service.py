@@ -3,7 +3,7 @@ import json
 import time
 from typing import Awaitable, Callable, Literal, cast
 
-from pydantic import ValidationError
+from pydantic import AnyHttpUrl, ValidationError
 from redis.asyncio.client import Redis
 from redis.exceptions import WatchError
 
@@ -66,7 +66,12 @@ async def _add_or_retry_task(task: HashTask, mode: Literal["add", "retry"]) -> H
                 return validated
             elif mode == "retry" and not data:
                 return HashTask(
-                    p_hash=task.p_hash, status=TaskStatus.not_found, result=[], retry_count=0, processed_at=0
+                    p_hash=task.p_hash,
+                    img_url=task.img_url,
+                    status=TaskStatus.not_found,
+                    result=[],
+                    retry_count=0,
+                    processed_at=0,
                 )
 
             if mode == "retry":
@@ -100,7 +105,14 @@ async def get_or_retry_task(p_hash: str) -> HashTask:
 
     data = await r.get(f"{settings.tasks_key}:{p_hash}")
     if not data or not (validated := _validate_task(data)):
-        return HashTask(p_hash=p_hash, status=TaskStatus.not_found, result=[], retry_count=0, processed_at=0)
+        return HashTask(
+            p_hash=p_hash,
+            img_url=cast(AnyHttpUrl, "https://notfound.image.com/"),
+            status=TaskStatus.not_found,
+            result=[],
+            retry_count=0,
+            processed_at=0,
+        )
 
     task = validated
 
@@ -123,7 +135,7 @@ async def get_or_retry_task(p_hash: str) -> HashTask:
     raise ValueError(f"Unexpected task status: {task.status}")
 
 
-async def new_task(task: HashTask) -> HashTask:
+async def new_redis_task(task: HashTask) -> HashTask:
     """Create a new task, or return the result if it already exists.
     Idempotent for the same p_hash.
 
@@ -189,6 +201,6 @@ __all__ = [
     "get_redis",
     "health_check",
     "get_or_retry_task",
-    "new_task",
+    "new_redis_task",
     "consume_task",
 ]
