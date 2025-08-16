@@ -13,7 +13,7 @@ def is_env_prod() -> bool:
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env" if is_env_prod() else ".env.sample")
 
-    model_url: AnyHttpUrl = Field(..., alias="MODEL_URL")
+    model_url: str = Field(..., alias="MODEL_URL")
 
     sentry_dsn: str = Field(..., alias="SENTRY_DSN")
 
@@ -24,7 +24,6 @@ class Settings(BaseSettings):
     tasks_key: str = Field(..., alias="TASKS_KEY")
     queue_key: str = Field(..., alias="QUEUE_KEY")
     result_ttl: int = Field(..., alias="RESULT_TTL")
-    claim_ms: int = Field(..., alias="CLAIM_MS")
 
     workers: int = Field(..., alias="WORKERS")
     max_retry_count: int = Field(..., alias="MAX_RETRY_COUNT")
