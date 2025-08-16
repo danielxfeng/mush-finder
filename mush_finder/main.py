@@ -10,6 +10,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from mush_finder.mush_model import mush_model
 from mush_finder.redis_service import (
     close_redis,
     get_or_retry_task,
@@ -25,6 +26,7 @@ from mush_finder.utils import adaptor_hash_task_to_response
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_redis()
+    mush_model.warmup()
     yield
     await close_redis()
 
