@@ -13,6 +13,8 @@ def is_env_prod() -> bool:
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env" if is_env_prod() else ".env.sample")
 
+    model_url: AnyHttpUrl = Field(..., alias="MODEL_URL")
+
     cors_origins: Union[list[AnyHttpUrl], Literal["*"]] = Field(..., alias="CORS_ORIGINS")
     api_key: uuid.UUID = Field(..., alias="API_KEY")
 
