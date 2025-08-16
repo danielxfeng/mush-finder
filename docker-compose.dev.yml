@@ -1,8 +1,0 @@
-services:
-  redis:
-    image: redis:latest
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "redis"]
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
