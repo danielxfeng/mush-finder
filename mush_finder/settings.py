@@ -15,6 +15,8 @@ class Settings(BaseSettings):
 
     model_url: AnyHttpUrl = Field(..., alias="MODEL_URL")
 
+    sentry_dsn: str = Field(..., alias="SENTRY_DSN")
+
     cors_origins: Union[list[AnyHttpUrl], Literal["*"]] = Field(..., alias="CORS_ORIGINS")
     api_key: uuid.UUID = Field(..., alias="API_KEY")
 

@@ -3,6 +3,7 @@ import json
 import time
 from typing import Awaitable, Callable, Literal, cast
 
+import sentry_sdk
 from pydantic import AnyHttpUrl, ValidationError
 from redis.asyncio.client import Redis
 from redis.exceptions import WatchError
@@ -18,7 +19,7 @@ async def init_redis() -> None:
     global redis_client
 
     redis_client = Redis.from_url(
-        cast(str, settings.redis_url),
+        str(settings.redis_url),
         decode_responses=True,
         health_check_interval=30,
         retry_on_timeout=True,
@@ -49,7 +50,8 @@ async def health_check() -> dict:
 def _validate_task(task_str: str) -> HashTask | None:
     try:
         return HashTask.model_validate_json(task_str)
-    except (ValidationError, json.JSONDecodeError, TypeError, ValueError):
+    except (ValidationError, json.JSONDecodeError, TypeError, ValueError) as e:
+        sentry_sdk.capture_exception(e)
         return None
 
 
@@ -195,7 +197,8 @@ async def consume_task(task_handler: TaskHandler) -> None:
             if result.status == TaskStatus.error:
                 raise ValueError("Task handler returned an error status")
             await r.set(task_key, result.model_dump_json(), ex=settings.result_ttl)
-        except Exception:
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
             result = task
             result.status = TaskStatus.error
             await r.set(task_key, result.model_dump_json(), ex=settings.result_ttl)
