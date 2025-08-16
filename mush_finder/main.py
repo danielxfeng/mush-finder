@@ -1,3 +1,4 @@
+import asyncio
 import secrets
 from contextlib import asynccontextmanager
 from typing import Annotated, AsyncGenerator, Callable
@@ -20,15 +21,23 @@ from mush_finder.redis_service import (
 )
 from mush_finder.schemas import HashTask, PHash, TaskBody, TaskResponse, TaskStatus
 from mush_finder.settings import settings
-from mush_finder.utils import adaptor_hash_task_to_response
+from mush_finder.utils import adaptor_hash_task_to_response, close_httpx_client
+from mush_finder.worker import worker
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_redis()
     mush_model.warmup()
-    yield
-    await close_redis()
+    tasks = [asyncio.create_task(worker()) for i in range(settings.workers)]
+
+    try:
+        yield
+    finally:
+        for t in tasks:
+            t.cancel()
+        await close_redis()
+        await close_httpx_client()
 
 
 app = FastAPI(lifespan=lifespan, root_path="/api")
