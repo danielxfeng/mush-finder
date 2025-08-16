@@ -47,7 +47,7 @@ class MushModel:
         self.is_warmup = False
 
         try:
-            self.model = timm.create_model(str(settings.model_url), pretrained=True)
+            self.model = timm.create_model(settings.model_url, pretrained=True)
             self.model.to(self.device)
             self.model.eval()
         except Exception as e:
