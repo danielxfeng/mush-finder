@@ -1,18 +1,20 @@
 import os
+import uuid
 from typing import Any, Literal, Union
 
 from pydantic import AnyHttpUrl, Field, RedisDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-def is_prod() -> bool:
+def is_env_prod() -> bool:
     return os.getenv("ENV", "development") == "production"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env" if is_prod() else ".env.sample")
+    model_config = SettingsConfigDict(env_file=".env" if is_env_prod() else ".env.sample")
 
     cors_origins: Union[list[AnyHttpUrl], Literal["*"]] = Field(..., alias="CORS_ORIGINS")
+    api_key: uuid.UUID = Field(..., alias="API_KEY")
 
     redis_url: RedisDsn = Field(..., alias="REDIS_URL")
     tasks_key: str = Field(..., alias="TASKS_KEY")
@@ -38,7 +40,7 @@ class Settings(BaseSettings):
 
     @property
     def is_prod(self) -> bool:
-        return is_prod()
+        return is_env_prod()
 
 
 settings = Settings()  # type: ignore[call-arg]
