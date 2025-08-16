@@ -7,6 +7,7 @@ import torchvision.transforms as transforms
 from PIL import Image
 
 from mush_finder.schemas import TaskResponse, TaskResult, TaskStatus
+from mush_finder.settings import settings
 
 CLASS_NAMES = sorted(
     [
@@ -45,7 +46,7 @@ class MushModel:
         self.is_warmup = False
 
         try:
-            self.model = timm.create_model("hf_hub:xin-daniel-feng/mush-finder-tiny", pretrained=True)
+            self.model = timm.create_model(str(settings.model_url), pretrained=True)
             self.model.to(self.device)
             self.model.eval()
         except Exception as e:
