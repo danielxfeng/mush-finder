@@ -4,12 +4,10 @@ from contextlib import asynccontextmanager
 from typing import Annotated, AsyncGenerator, Callable
 from urllib.request import Request
 
+import sentry_sdk
 from fastapi import FastAPI, HTTPException, Path, Response
-from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
-from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from mush_finder.mush_model import mush_model
 from mush_finder.redis_service import (
@@ -23,6 +21,14 @@ from mush_finder.schemas import HashTask, PHash, TaskBody, TaskResponse, TaskSta
 from mush_finder.settings import settings
 from mush_finder.utils import adaptor_hash_task_to_response, close_httpx_client
 from mush_finder.worker import worker
+
+if settings.is_prod and settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        # Add data like request headers and IP for users,
+        # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
+        send_default_pii=True,
+    )
 
 
 @asynccontextmanager
@@ -105,22 +111,3 @@ async def get_task(
     validated = PHash(p_hash=p_hash)
     res = await get_or_retry_task(validated.p_hash)
     return adaptor_hash_task_to_response(res)
-
-
-@app.exception_handler(Exception)
-async def unified_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    if isinstance(exc, RequestValidationError):
-        return JSONResponse(
-            status_code=422,
-            content={"detail": "Validation error", "errors": exc.errors()},
-        )
-
-    if isinstance(exc, StarletteHTTPException):
-        if exc.status_code == 404:
-            return JSONResponse(status_code=404, content={"detail": "Not Found"})
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"detail": "Error"} if settings.is_prod else {"detail": exc.detail},
-        )
-
-    return JSONResponse(status_code=500, content={"detail": "Internal server error"})

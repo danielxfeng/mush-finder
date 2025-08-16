@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 
+import sentry_sdk
 import timm
 import torch
 import torchvision.transforms as transforms
@@ -50,7 +51,7 @@ class MushModel:
             self.model.to(self.device)
             self.model.eval()
         except Exception as e:
-            raise RuntimeError(f"Failed to load model from HF Hub: {e}") from e
+            raise RuntimeError(f"Failed to load model from HF Hub: {e}")
 
         self.transform = transforms.Compose(
             [
@@ -89,7 +90,8 @@ class MushModel:
             results = [TaskResult(category=CLASS_NAMES[i], confidence=float(p)) for i, p in zip(top_idx, top_probs)]
 
             return TaskResponse(p_hash=p_hash, status=TaskStatus.done, result=results)
-        except Exception:
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
             return TaskResponse(p_hash=p_hash, status=TaskStatus.error, result=[])
 
 

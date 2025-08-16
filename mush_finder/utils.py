@@ -1,6 +1,7 @@
 import io
 
 import httpx
+import sentry_sdk
 from PIL import Image
 from pydantic import AnyHttpUrl
 
@@ -25,7 +26,8 @@ async def image_download(url: AnyHttpUrl) -> Image.Image | None:
         img_file.raise_for_status()
         img = Image.open(io.BytesIO(img_file.content)).convert("RGB")
         return img
-    except Exception:
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
         return None
 
 
