@@ -23,6 +23,7 @@ async def init_redis() -> None:
         health_check_interval=30,
         retry_on_timeout=True,
         socket_timeout=5,
+        ssl=settings.is_prod,
     )
 
 
